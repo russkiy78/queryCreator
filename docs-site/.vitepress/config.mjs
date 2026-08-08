@@ -11,7 +11,7 @@ export default defineConfig({
   head: [['link', { rel: 'icon', href: '/queryCreator/favicon.ico' }]],
 
   themeConfig: {
-    logo: { light: '/queryCreator/logo/logo-small-white.png', dark: '/queryCreator/logo/logo-small-white.png' },
+    logo: { light: '/queryCreator/logo/logo-small-white.png', dark: '/queryCreator/logo/logo-small-black.png' },
 
     search: {
       provider: 'local'
