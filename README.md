@@ -1,4 +1,7 @@
-<div align="center"><img src="logo/logo-big-transparent.png" alt="queryCreator logo" width="600"></div>
+<div align="center"><img src="logo/logo-big-transparent.png" alt="queryCreator logo" width="600">
+
+[**Documentation**](https://russkiy78.github.io/queryCreator/)
+</div>
 
 # queryCreator
 
