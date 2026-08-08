@@ -1,3 +1,5 @@
+<div align="center"><img src="logo/logo.png" alt="queryCreator logo" width="200"></div>
+
 # queryCreator
 
 A lightweight SQL query-builder library for pure C++20, with no external
