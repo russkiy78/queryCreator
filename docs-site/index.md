@@ -5,9 +5,6 @@ hero:
   name: "queryCreator"
   text: "Lightweight SQL Query Builder"
   tagline: Pure C++20, five native DB drivers, fluent API
-  image:
-    src: logo/logo.png
-    alt: queryCreator logo
   actions:
     - theme: brand
       text: Get Started
