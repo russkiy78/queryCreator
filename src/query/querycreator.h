@@ -43,7 +43,7 @@ public:
     // contract as QcNativeConnection::execute().
     std::optional<QcResultSet> execute(const std::string & sql, const QcSqlBase::QcVariantList & params = {});
 
-    // Named counterparts of the six execute() overloads above -- same
+    // Named counterparts of the five execute() overloads above -- same
     // builder-in/pool-out contract, rows come back as QcNamedResultSet
     // (column name -> value) instead of positional QcResultSet. See
     // QcNativeConnection::executeNamed()/executeReturningNamed() for where
