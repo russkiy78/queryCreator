@@ -8,10 +8,13 @@ export default defineConfig({
   lastUpdated: true,
   cleanUrls: true,
 
-  head: [['link', { rel: 'icon', href: '/queryCreator/favicon.ico' }]],
+  head: [
+    ['link', { rel: 'icon', href: '/queryCreator/favicon.ico' }],
+    ['style', {}, `.VPNavBarTitle .title span { display: none; }`]
+  ],
 
   themeConfig: {
-    logo: { light: '/queryCreator/logo/logo-small-white.png', dark: '/queryCreator/logo/logo-small-black.png' },
+    logo: { light: '/logo/logo-small-white.png', dark: '/logo/logo-small-black.png' },
 
     search: {
       provider: 'local'
