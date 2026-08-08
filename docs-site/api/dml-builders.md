@@ -136,6 +136,40 @@ auto result = connection.execute(stmt.sql, stmt.params);
 Multi-row INSERT (one `VALUES` with multiple row groups) is **not
 supported** — call `toSql()`/`execute()` in a loop.
 
+## Query Validation
+
+Like `QcSqlQuery`, `toSql()` on all three builders checks structure first and
+throws `QcQueryBuildError` if it finds a gap — most commonly, a missing
+target table:
+
+```cpp
+QcSqlInsert insert;
+insert.set("id", 1LL).returning({"id"});
+insert.toSql();
+// throws QcQueryBuildError: Incomplete query: INSERT has no target table
+// (call into())
+```
+
+This is checked **unconditionally**, not only when `returning()` is used —
+a missing table breaks the statement either way. `UPDATE`/`DELETE` also
+check their WHERE side for an unclosed parenthesis group and an incomplete
+condition (a `where()`/`and_()`/`or_()` call with no comparator chained on)
+— the same checks `QcSqlQuery` runs, see
+[Query Validation](/api/select-queries#query-validation). A missing `WHERE`
+clause itself is **not** flagged on `UPDATE`/`DELETE` — updating or deleting
+every row is a legitimate, deliberate choice. An empty column list on
+`INSERT` is likewise not flagged — `toSql()` renders it as
+`INSERT INTO t () VALUES ()` on purpose.
+
+Call `validate()` (returns one message per problem, empty if none) to check
+without triggering the throw:
+
+```cpp
+for (const std::string & problem : update.validate()) {
+    std::cerr << problem << "\n";
+}
+```
+
 ## EDSL (Easy Domain-Specific Language)
 
 The `set()` method on `QcSqlInsert` and `QcSqlUpdate` supports the full

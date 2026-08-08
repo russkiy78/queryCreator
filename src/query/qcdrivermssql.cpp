@@ -1,8 +1,17 @@
+#ifdef _WIN32
+// The Windows SDK's sql.h/sqltypes.h use SAL annotations (_Out_, _In_reads_,
+// ...) and GUID, both only defined once windows.h has been included first;
+// unixODBC's headers on Linux don't have that ordering requirement.
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 #include <sql.h>
 #include <sqlext.h>
 #include <sqlucode.h> // SQL_WVARCHAR/SQL_WLONGVARCHAR/SQL_C_WCHAR -- the wide-character type codes, not in sql.h/sqlext.h on unixODBC
 
 #include <cstring>
+#include <stdexcept>
 #include <type_traits>
 #include <variant>
 

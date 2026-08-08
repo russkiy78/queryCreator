@@ -592,6 +592,43 @@ static accessor methods.
   concatenated without parentheses (`main UNION rhs`). Caveat for all: MSSQL does not
   allow `ORDER BY` in a non-last `SELECT` of the compound — not accommodated.
 
+### Structural validation — `validate()`/`QcQueryBuildError`
+
+Every builder (`QcSqlQuery`/`QcSqlInsert`/`QcSqlUpdate`/`QcSqlDelete`) has a
+public `validate() const` returning `QcStringList` (one human-readable
+problem per issue, empty if none) plus a `toSql()` that calls it first and
+throws `QcQueryBuildError` (`qcsqlbase.h`, `std::logic_error`) built from the
+result via the shared `qcThrowIfQueryInvalid()` helper. This exists because
+every `toSql()` used to just concatenate whatever state was set, silently
+producing broken SQL text for gaps like `RETURNING` with no target table.
+
+- **Checked**: no target table on `QcSqlInsert`/`Update`/`Delete`
+  (unconditional — not only when `returning()` is used, since a missing
+  table breaks the statement either way); a non-`CROSS` `JOIN` with no `ON`
+  condition (`QcSqlQuery` only — `addCrossJoin()` is exempt by design); an
+  unclosed `openParenthesis()`/`*_OpenParenthesis()` (`m_whereParenDepth !=
+  0`); a `where()`/`and_()`/`or_()`/`having()`/`and_Having()`/`or_Having()`
+  call whose returned `QcSqlQueryElement` never had a comparator chained
+  onto it (`QcSqlQueryElement::isIncomplete()` — column-only state, still at
+  the default `_isEqualTo_`/monostate `m_value`; `validateChain()` scans a
+  whole chain for these, shared by every WHERE/HAVING-chain owner the same
+  way `renderChain()` already is).
+- **Not checked**: no schema exists to check against, so a WHERE/JOIN
+  referencing a nonexistent column, or a JOIN alias nothing else
+  references, are not flagged — only gaps in the builder's own gathered
+  state. An `UPDATE`/`DELETE` with no `WHERE` at all is deliberately not
+  flagged (updating/deleting every row is legitimate, common intent). An
+  `INSERT` with an empty column list is deliberately not flagged either —
+  `toSql()` renders it as `INSERT INTO t () VALUES ()` on purpose (pinned by
+  `QcSqlInsertToSql.EmptyColumnsRendersEmptyColumnAndValueLists`).
+- **Recursion is implicit, not walked**: `validate()` only inspects the
+  builder's own direct state — a nested subquery (FROM-subquery, JOIN
+  subquery, WHERE-subquery operand, CTE, set-operation member) validates
+  itself independently the moment *its own* `toSql()` runs, which already
+  happens as the outer statement recurses into it during rendering. So a
+  problem three levels deep in a subquery still throws when the outermost
+  `toSql()` is called, without `validate()` itself needing to walk the tree.
+
 ## SQL generation — `QcSqlDialect`
 
 [`qcsqldialect.h`](../src/query/qcsqldialect.h)/`.cpp` — the only place that

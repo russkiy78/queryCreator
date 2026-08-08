@@ -151,6 +151,11 @@ query.closeParenthesis();
 The balance is tracked internally — `closeParenthesis()` returns `false` if there
 is nothing to close.
 
+An unclosed parenthesis group, or a `where()`/`and_()`/`or_()` call whose
+element never got a comparator (like the "Basic Comparisons" example above,
+minus the `.isEqualTo(...)` part), is caught by the owning query's `toSql()`
+— see [Query Validation](/api/select-queries#query-validation).
+
 ## HAVING Conditions
 
 `having()`, `and_Having()`, `or_Having()` accept the same `QcSqlQueryElement`

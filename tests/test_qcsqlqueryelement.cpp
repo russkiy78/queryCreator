@@ -838,3 +838,74 @@ TEST(QcSqlQueryElementRenderChain, EmptyChainRendersEmptyString)
     EXPECT_TRUE(QcSqlQueryElement::renderChain(chain, params).empty());
     EXPECT_TRUE(params.empty());
 }
+
+// =====================================================================
+// isIncomplete() / validateChain() -- feeds QcSqlQuery/QcSqlUpdate/
+// QcSqlDelete::validate() (see qcsqlbase.h's QcQueryBuildError)
+// =====================================================================
+
+TEST(QcSqlQueryElementIsIncomplete, TrueForFreshlyConstructedColumnElement)
+{
+    QcSqlQueryElement element("col");
+
+    EXPECT_TRUE(element.isIncomplete());
+}
+
+TEST(QcSqlQueryElementIsIncomplete, FalseAfterComparatorChained)
+{
+    QcSqlQueryElement element("col");
+    element.isEqualTo(QcSqlQueryElement::QcVariant(1LL));
+
+    EXPECT_FALSE(element.isIncomplete());
+}
+
+TEST(QcSqlQueryElementIsIncomplete, FalseAfterIsNull)
+{
+    // isNull() leaves m_value at monostate too -- isIncomplete() must key
+    // off more than "value is empty" or this would be a false positive.
+    QcSqlQueryElement element("col");
+    element.isNull();
+
+    EXPECT_FALSE(element.isIncomplete());
+}
+
+TEST(QcSqlQueryElementIsIncomplete, FalseForParenthesisMarkers)
+{
+    QcSqlQueryElement openMarker(QcSqlBase::_openParenthesis_);
+    QcSqlQueryElement closeMarker(QcSqlBase::_closeParenthesis_);
+
+    EXPECT_FALSE(openMarker.isIncomplete());
+    EXPECT_FALSE(closeMarker.isIncomplete());
+}
+
+TEST(QcSqlQueryElementValidateChain, ReportsEachIncompleteElementWithColumnAndLabel)
+{
+    std::vector<std::pair<int, QcSqlQueryElement>> chain;
+    chain.push_back({0, QcSqlQueryElement("a")});
+    chain.back().second.isEqualTo(QcSqlQueryElement::QcVariant(1LL));
+    chain.push_back({0, QcSqlQueryElement("b")});
+
+    const QcSqlBase::QcStringList problems = QcSqlQueryElement::validateChain(chain, "WHERE");
+
+    ASSERT_EQ(problems.size(), 1u);
+    EXPECT_NE(problems[0].find("WHERE"), std::string::npos);
+    EXPECT_NE(problems[0].find("b"), std::string::npos);
+}
+
+TEST(QcSqlQueryElementValidateChain, EmptyChainHasNoProblems)
+{
+    std::vector<std::pair<int, QcSqlQueryElement>> chain;
+
+    EXPECT_TRUE(QcSqlQueryElement::validateChain(chain, "WHERE").empty());
+}
+
+TEST(QcSqlQueryElementValidateChain, IgnoresParenthesisMarkers)
+{
+    std::vector<std::pair<int, QcSqlQueryElement>> chain;
+    chain.push_back({0, QcSqlQueryElement(QcSqlBase::_openParenthesis_)});
+    chain.push_back({0, QcSqlQueryElement("a")});
+    chain.back().second.isEqualTo(QcSqlQueryElement::QcVariant(1LL));
+    chain.push_back({0, QcSqlQueryElement(QcSqlBase::_closeParenthesis_)});
+
+    EXPECT_TRUE(QcSqlQueryElement::validateChain(chain, "WHERE").empty());
+}

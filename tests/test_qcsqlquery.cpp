@@ -833,3 +833,151 @@ TEST(QcSqlQueryToSql, NoArgOverloadMatchesThreadingOverload)
     ASSERT_EQ(statement.params.size(), params.size());
     EXPECT_EQ(std::get<long long>(statement.params[0]), std::get<long long>(params[0]));
 }
+
+// =====================================================================
+// validate() / toSql() structural-completeness checks
+// =====================================================================
+
+TEST(QcSqlQueryValidate, DefaultConstructedQueryHasNoProblems)
+{
+    QcSqlQuery query;
+
+    EXPECT_TRUE(query.validate().empty());
+}
+
+TEST(QcSqlQueryValidate, WellFormedQueryHasNoProblems)
+{
+    QcSqlQuery query;
+    query.fromTable("users");
+    query.where("id").isEqualTo(QcSqlQuery::QcVariant(1LL));
+
+    EXPECT_TRUE(query.validate().empty());
+}
+
+TEST(QcSqlQueryValidate, JoinWithoutOnConditionIsReported)
+{
+    QcSqlQuery joinSource;
+    joinSource.fromTable("groups");
+    QcSqlQuery query;
+    query.fromTable("users");
+    query.addJoin("g", joinSource, "");
+
+    const QcSqlQuery::QcStringList problems = query.validate();
+    ASSERT_EQ(problems.size(), 1u);
+    EXPECT_NE(problems[0].find("JOIN"), std::string::npos);
+    EXPECT_NE(problems[0].find("g"), std::string::npos);
+}
+
+TEST(QcSqlQueryValidate, CrossJoinWithoutOnConditionIsNotReported)
+{
+    QcSqlQuery joinSource;
+    joinSource.fromTable("groups");
+    QcSqlQuery query;
+    query.fromTable("users");
+    query.addCrossJoin("g", joinSource);
+
+    EXPECT_TRUE(query.validate().empty());
+}
+
+TEST(QcSqlQueryValidate, UnclosedParenthesisIsReported)
+{
+    QcSqlQuery query;
+    query.fromTable("users");
+    query.where("a").isEqualTo(QcSqlQuery::QcVariant(1LL));
+    query.openParenthesis();
+
+    const QcSqlQuery::QcStringList problems = query.validate();
+    ASSERT_EQ(problems.size(), 1u);
+    EXPECT_NE(problems[0].find("parenthesis"), std::string::npos);
+}
+
+TEST(QcSqlQueryValidate, IncompleteWhereConditionIsReported)
+{
+    QcSqlQuery query;
+    query.fromTable("users");
+    query.where("name");
+
+    const QcSqlQuery::QcStringList problems = query.validate();
+    ASSERT_EQ(problems.size(), 1u);
+    EXPECT_NE(problems[0].find("WHERE"), std::string::npos);
+    EXPECT_NE(problems[0].find("name"), std::string::npos);
+}
+
+TEST(QcSqlQueryValidate, IncompleteHavingConditionIsReported)
+{
+    QcSqlQuery query;
+    query.fromTable("users");
+    query.groupBy({"dept"});
+    query.having("cnt");
+
+    const QcSqlQuery::QcStringList problems = query.validate();
+    ASSERT_EQ(problems.size(), 1u);
+    EXPECT_NE(problems[0].find("HAVING"), std::string::npos);
+}
+
+TEST(QcSqlQueryToSql, ThrowsQcQueryBuildErrorForJoinWithoutOnCondition)
+{
+    QcSqlQuery joinSource;
+    joinSource.fromTable("groups");
+    QcSqlQuery query;
+    query.fromTable("users");
+    query.addJoin("g", joinSource, "");
+
+    EXPECT_THROW(query.toSql(), QcQueryBuildError);
+}
+
+TEST(QcSqlQueryToSql, ThrowsQcQueryBuildErrorForUnclosedParenthesis)
+{
+    QcSqlQuery query;
+    query.fromTable("users");
+    query.openParenthesis();
+    query.where("a").isEqualTo(QcSqlQuery::QcVariant(1LL));
+
+    EXPECT_THROW(query.toSql(), QcQueryBuildError);
+}
+
+TEST(QcSqlQueryToSql, ThrowsQcQueryBuildErrorForIncompleteWhereCondition)
+{
+    QcSqlQuery query;
+    query.fromTable("users");
+    query.where("name");
+
+    EXPECT_THROW(query.toSql(), QcQueryBuildError);
+}
+
+TEST(QcSqlQueryToSql, ThrowsForProblemInsideNestedFromSubquery)
+{
+    // validate() only checks a query's own direct state (see its doc
+    // comment in qcsqlquery.h) -- this pins that a problem *inside* a
+    // nested subquery still surfaces, because rendering that subquery
+    // recurses into its own toSql(), which runs its own validate().
+    QcSqlQuery sub;
+    sub.fromTable("users");
+    sub.where("id");
+
+    QcSqlQuery outer;
+    outer.fromSubQuery("u", sub);
+
+    EXPECT_THROW(outer.toSql(), QcQueryBuildError);
+}
+
+TEST(QcSqlQueryToSql, ErrorMessageListsEveryProblemFound)
+{
+    QcSqlQuery joinSource;
+    joinSource.fromTable("groups");
+    QcSqlQuery query;
+    query.fromTable("users");
+    query.addJoin("g", joinSource, "");
+    query.where("name");
+    query.openParenthesis();
+
+    try {
+        query.toSql();
+        FAIL() << "expected QcQueryBuildError to be thrown";
+    } catch (const QcQueryBuildError & e) {
+        const std::string message = e.what();
+        EXPECT_NE(message.find("JOIN"), std::string::npos);
+        EXPECT_NE(message.find("WHERE"), std::string::npos);
+        EXPECT_NE(message.find("parenthesis"), std::string::npos);
+    }
+}

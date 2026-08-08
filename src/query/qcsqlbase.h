@@ -2,6 +2,7 @@
 #define QCSQLBASE_H
 
 #include <cstddef>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <variant>
@@ -64,6 +65,43 @@ public:
     enum jsonValueKind {_jsonAsText_, _jsonAsNumber_, _jsonAsRaw_};
 
 };
+
+// Thrown by QcSqlQuery/QcSqlInsert/QcSqlUpdate/QcSqlDelete::toSql() when
+// validate() finds the statement structurally incomplete -- e.g. RETURNING
+// with no target table, a JOIN with no ON condition, a where()/and_()/or_()
+// call with no comparator ever chained onto it, an openParenthesis() left
+// unclosed. Each builder's own validate() (callable directly too, without
+// triggering the throw -- see e.g. QcSqlQuery::validate()) is the source of
+// truth for exactly what's checked; this only exists to turn its findings
+// into a single, structural exception at the point toSql() would otherwise
+// have silently emitted broken SQL. Never thrown for anything content-level
+// (a nonexistent column name, a value of the wrong type) -- the builders
+// have no schema to check that against, only their own gathered state.
+class QcQueryBuildError : public std::logic_error
+{
+public:
+    using std::logic_error::logic_error;
+};
+
+// Joins `problems` (as gathered by a builder's own validate()) into one
+// QcQueryBuildError, or does nothing if `problems` is empty -- the one-line
+// call every builder's toSql() makes right before it starts rendering, so
+// every validate() implementation stays free of exception-formatting
+// concerns and every builder throws with the exact same message shape.
+inline void qcThrowIfQueryInvalid(const std::vector<std::string> & problems)
+{
+    if (problems.empty()) {
+        return;
+    }
+
+    std::string message = "Incomplete query:";
+    for (const std::string & problem : problems) {
+        message += " " + problem + ";";
+    }
+    message.pop_back();
+
+    throw QcQueryBuildError(message);
+}
 
 // Result of QcSqlQuery::toSql(): the generated SQL text (native positional
 // placeholders for whichever QcDbDriver it was rendered for -- see

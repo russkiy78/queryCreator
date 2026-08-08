@@ -56,6 +56,18 @@ public:
     bool openParenthesis();
     bool closeParenthesis();
 
+    // Checks this statement's own state for structural gaps that would
+    // otherwise make toSql() silently emit broken SQL -- no target table
+    // (table() never called, breaking this UPDATE regardless of whether
+    // returning() is in play), an openParenthesis()/*_OpenParenthesis() left
+    // unclosed, or a where()/and_()/or_() call whose returned element never
+    // got a comparator chained onto it -- see
+    // QcSqlQuery::validate()'s doc comment for the shared WHERE-chain
+    // rationale (this reuses the exact same QcSqlQueryElement checks). An
+    // UPDATE with no WHERE at all is deliberately not flagged -- updating
+    // every row is a legitimate, common intent, not a gap.
+    QcStringList validate() const;
+
     /*SQL generation*/
     QcSqlStatement toSql() const;
     QcSqlStatement toSql(QcDbDriver driver) const;

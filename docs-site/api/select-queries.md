@@ -215,6 +215,44 @@ QcSqlBase::QcVariantList params;
 std::string sql = query.toSql(params, QcDbDriver::MySQL);
 ```
 
+## Query Validation
+
+`toSql()` checks the query's own structure before rendering and throws
+`QcQueryBuildError` (a `std::logic_error`) if it finds a gap that would
+otherwise silently produce broken SQL:
+
+```cpp
+query.addJoin("d", deptRef, "");  // forgot the ON condition
+query.toSql();
+// throws QcQueryBuildError: Incomplete query: JOIN "d" has no ON condition
+// (use addCrossJoin() instead if a cross join was intended)
+```
+
+Call `validate()` directly to check without triggering the throw — it
+returns one message per problem found, empty if the query is well-formed:
+
+```cpp
+for (const std::string & problem : query.validate()) {
+    std::cerr << problem << "\n";
+}
+```
+
+Checked: a non-`CROSS` `JOIN` with no `ON` condition, an unclosed
+`openParenthesis()`/`*_OpenParenthesis()`, and a `where()`/`and_()`/`or_()`/
+`having()`/`and_Having()`/`or_Having()` call whose returned element never
+got a comparator chained onto it (see
+[WHERE Conditions](/api/where-conditions)). A nested subquery (`FROM`,
+`JOIN`, `WITH`, a set operation, a `WHERE`-embedded subquery) is validated
+independently the moment its own `toSql()` runs as part of rendering the
+outer query — a gap three levels deep still throws.
+
+Not checked: anything that would need a real schema — a `WHERE`/`JOIN`
+referencing a column or alias that doesn't exist. The builder has no schema
+to check against, only its own gathered state.
+
+`QcSqlInsert`/`QcSqlUpdate`/`QcSqlDelete` have the same `validate()`/`toSql()`
+pattern — see [INSERT / UPDATE / DELETE](/api/dml-builders#query-validation).
+
 ## Use Driver
 
 Set the rendering dialect once, before `toSql()`:

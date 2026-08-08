@@ -430,3 +430,43 @@ TEST(QcSqlInsertToSql, NoArgOverloadMatchesThreadingOverload)
     ASSERT_EQ(statement.params.size(), params.size());
     EXPECT_EQ(std::get<long long>(statement.params[0]), std::get<long long>(params[0]));
 }
+
+// =====================================================================
+// validate() / toSql() structural-completeness checks
+// =====================================================================
+
+TEST(QcSqlInsertValidate, NoTableIsReported)
+{
+    QcSqlInsert insert;
+    insert.set("id", QcSqlInsert::QcVariant(1LL));
+
+    const QcSqlInsert::QcStringList problems = insert.validate();
+    ASSERT_EQ(problems.size(), 1u);
+    EXPECT_NE(problems[0].find("table"), std::string::npos);
+}
+
+TEST(QcSqlInsertValidate, WellFormedInsertHasNoProblems)
+{
+    QcSqlInsert insert;
+    insert.into("users").set("id", QcSqlInsert::QcVariant(1LL));
+
+    EXPECT_TRUE(insert.validate().empty());
+}
+
+TEST(QcSqlInsertToSql, ThrowsQcQueryBuildErrorWhenNoTable)
+{
+    QcSqlInsert insert;
+    insert.set("id", QcSqlInsert::QcVariant(1LL));
+
+    EXPECT_THROW(insert.toSql(), QcQueryBuildError);
+}
+
+TEST(QcSqlInsertToSql, ThrowsQcQueryBuildErrorEvenWhenReturningWasRequested)
+{
+    // The user-facing motivating case: RETURNING was set up but into() never
+    // was -- toSql() must not silently emit "INSERT INTO  (...) ... RETURNING ...".
+    QcSqlInsert insert;
+    insert.set("id", QcSqlInsert::QcVariant(1LL)).returning({"id"});
+
+    EXPECT_THROW(insert.toSql(), QcQueryBuildError);
+}

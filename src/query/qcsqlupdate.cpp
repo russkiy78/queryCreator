@@ -97,8 +97,29 @@ bool QcSqlUpdate::closeParenthesis()
     return true;
 }
 
+QcSqlUpdate::QcStringList QcSqlUpdate::validate() const
+{
+    QcStringList problems;
+
+    if (m_table.empty()) {
+        problems.push_back("UPDATE has no target table (call table())");
+    }
+
+    if (m_whereParenDepth != 0) {
+        problems.push_back("WHERE clause has " + std::to_string(m_whereParenDepth)
+            + " unclosed parenthesis group(s) -- call closeParenthesis() once per openParenthesis()/*_OpenParenthesis()");
+    }
+
+    const QcStringList whereProblems = QcSqlQueryElement::validateChain(m_whereElements, "WHERE");
+    problems.insert(problems.end(), whereProblems.begin(), whereProblems.end());
+
+    return problems;
+}
+
 std::string QcSqlUpdate::toSql(QcVariantList & params, QcDbDriver driver) const
 {
+    qcThrowIfQueryInvalid(validate());
+
     std::string sql = "UPDATE " + QcSqlDialect::quoteTableRef(m_table, driver) + " SET ";
 
     for (std::size_t i = 0; i < m_columns.size(); ++i) {

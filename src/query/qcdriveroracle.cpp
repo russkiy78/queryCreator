@@ -1,6 +1,7 @@
 #include <oci.h>
 
 #include <cstring>
+#include <stdexcept>
 #include <type_traits>
 #include <variant>
 

@@ -238,3 +238,66 @@ TEST(QcSqlUpdateToSql, NoArgOverloadMatchesThreadingOverload)
     EXPECT_EQ(statement.sql, sqlFromThreadingOverload);
     ASSERT_EQ(statement.params.size(), params.size());
 }
+
+// =====================================================================
+// validate() / toSql() structural-completeness checks
+// =====================================================================
+
+TEST(QcSqlUpdateValidate, NoTableIsReported)
+{
+    QcSqlUpdate update;
+    update.set("name", QcSqlUpdate::QcVariant(std::string("A")));
+
+    const QcSqlUpdate::QcStringList problems = update.validate();
+    ASSERT_EQ(problems.size(), 1u);
+    EXPECT_NE(problems[0].find("table"), std::string::npos);
+}
+
+TEST(QcSqlUpdateValidate, UnclosedParenthesisIsReported)
+{
+    QcSqlUpdate update;
+    update.table("users").set("name", QcSqlUpdate::QcVariant(std::string("A")));
+    update.openParenthesis();
+
+    const QcSqlUpdate::QcStringList problems = update.validate();
+    ASSERT_EQ(problems.size(), 1u);
+    EXPECT_NE(problems[0].find("parenthesis"), std::string::npos);
+}
+
+TEST(QcSqlUpdateValidate, IncompleteWhereConditionIsReported)
+{
+    QcSqlUpdate update;
+    update.table("users").set("name", QcSqlUpdate::QcVariant(std::string("A")));
+    update.where("id");
+
+    const QcSqlUpdate::QcStringList problems = update.validate();
+    ASSERT_EQ(problems.size(), 1u);
+    EXPECT_NE(problems[0].find("WHERE"), std::string::npos);
+}
+
+TEST(QcSqlUpdateValidate, NoWhereClauseIsNotAProblem)
+{
+    // Unlike a dangling where()/and_()/or_() call, updating every row on
+    // purpose (no WHERE at all) is legitimate SQL, not a gap.
+    QcSqlUpdate update;
+    update.table("users").set("name", QcSqlUpdate::QcVariant(std::string("A")));
+
+    EXPECT_TRUE(update.validate().empty());
+}
+
+TEST(QcSqlUpdateToSql, ThrowsQcQueryBuildErrorWhenNoTable)
+{
+    QcSqlUpdate update;
+    update.set("name", QcSqlUpdate::QcVariant(std::string("A")));
+
+    EXPECT_THROW(update.toSql(), QcQueryBuildError);
+}
+
+TEST(QcSqlUpdateToSql, ThrowsQcQueryBuildErrorForIncompleteWhereCondition)
+{
+    QcSqlUpdate update;
+    update.table("users").set("name", QcSqlUpdate::QcVariant(std::string("A")));
+    update.where("id");
+
+    EXPECT_THROW(update.toSql(), QcQueryBuildError);
+}

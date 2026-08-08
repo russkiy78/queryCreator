@@ -45,8 +45,21 @@ QcSqlInsert & QcSqlInsert::returning(const QcStringList & columns, const std::st
     return *this;
 }
 
+QcSqlInsert::QcStringList QcSqlInsert::validate() const
+{
+    QcStringList problems;
+
+    if (m_table.empty()) {
+        problems.push_back("INSERT has no target table (call into())");
+    }
+
+    return problems;
+}
+
 std::string QcSqlInsert::toSql(QcVariantList & params, QcDbDriver driver) const
 {
+    qcThrowIfQueryInvalid(validate());
+
     std::string columnsSql;
     std::string valuesSql;
 

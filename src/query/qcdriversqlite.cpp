@@ -1,5 +1,6 @@
 #include <sqlite3.h>
 
+#include <stdexcept>
 #include <type_traits>
 #include <variant>
 

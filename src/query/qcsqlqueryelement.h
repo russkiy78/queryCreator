@@ -186,6 +186,25 @@ public:
     bool isOpenParenthesisMarker() const;
     bool isCloseParenthesisMarker() const;
 
+    // True for an element seeded by QcSqlQuery/QcSqlUpdate/QcSqlDelete's
+    // where()/and_()/or_() (a bare column name, m_compareType still at its
+    // default _isEqualTo_) that never had a comparator -- isEqualTo()/
+    // isLike()/isNull()/... -- chained onto it afterward. toSql() would
+    // otherwise render it as `column = ?` bound to a meaningless
+    // default-constructed value instead of failing loudly. False for a
+    // paren-group marker (nothing to complete) and for every element a
+    // comparator actually touched, JSON comparison included.
+    bool isIncomplete() const;
+
+    // One human-readable problem string per isIncomplete() element found in
+    // `chain`, naming both the offending column and `clauseLabel` ("WHERE"/
+    // "HAVING") so a QcQueryBuildError built from several of these (see
+    // qcsqlbase.h) reads as a checklist rather than a single vague
+    // complaint. Shared by every WHERE/HAVING-chain owner (QcSqlQuery's own
+    // WHERE and HAVING, QcSqlUpdate's and QcSqlDelete's WHERE) the same way
+    // renderChain() already is -- see its doc comment above.
+    static QcStringList validateChain(const std::vector<std::pair<int, QcSqlQueryElement>> & chain, const std::string & clauseLabel);
+
     // Renders a whole WHERE/HAVING-shaped chain -- {connector, element}
     // pairs, possibly interleaved with paren-group markers -- into one
     // parenthesis-and-AND/OR-glued expression, appending each element's

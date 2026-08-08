@@ -294,8 +294,34 @@ std::string QcSqlQuery::renderFreeText(const FreeTextClause & clause, QcVariantL
     return sql;
 }
 
+QcSqlQuery::QcStringList QcSqlQuery::validate() const
+{
+    QcStringList problems;
+
+    for (const JoinClause & join : m_joins) {
+        if (join.type != _crossJoin_ && join.onCondition.empty()) {
+            problems.push_back("JOIN \"" + join.alias + "\" has no ON condition (use addCrossJoin() instead if a cross join was intended)");
+        }
+    }
+
+    if (m_whereParenDepth != 0) {
+        problems.push_back("WHERE clause has " + std::to_string(m_whereParenDepth)
+            + " unclosed parenthesis group(s) -- call closeParenthesis() once per openParenthesis()/*_OpenParenthesis()");
+    }
+
+    const QcStringList whereProblems = QcSqlQueryElement::validateChain(m_whereElements, "WHERE");
+    problems.insert(problems.end(), whereProblems.begin(), whereProblems.end());
+
+    const QcStringList havingProblems = QcSqlQueryElement::validateChain(m_havingElements, "HAVING");
+    problems.insert(problems.end(), havingProblems.begin(), havingProblems.end());
+
+    return problems;
+}
+
 std::string QcSqlQuery::toSql(QcVariantList & params, QcDbDriver driver) const
 {
+    qcThrowIfQueryInvalid(validate());
+
     std::string sql;
 
     if (!m_ctes.empty()) {

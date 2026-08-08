@@ -196,3 +196,64 @@ TEST(QcSqlDeleteToSql, NoArgOverloadMatchesThreadingOverload)
     EXPECT_EQ(statement.sql, sqlFromThreadingOverload);
     ASSERT_EQ(statement.params.size(), params.size());
 }
+
+// =====================================================================
+// validate() / toSql() structural-completeness checks
+// =====================================================================
+
+TEST(QcSqlDeleteValidate, NoTableIsReported)
+{
+    QcSqlDelete del;
+
+    const QcSqlDelete::QcStringList problems = del.validate();
+    ASSERT_EQ(problems.size(), 1u);
+    EXPECT_NE(problems[0].find("table"), std::string::npos);
+}
+
+TEST(QcSqlDeleteValidate, UnclosedParenthesisIsReported)
+{
+    QcSqlDelete del;
+    del.from("users");
+    del.openParenthesis();
+
+    const QcSqlDelete::QcStringList problems = del.validate();
+    ASSERT_EQ(problems.size(), 1u);
+    EXPECT_NE(problems[0].find("parenthesis"), std::string::npos);
+}
+
+TEST(QcSqlDeleteValidate, IncompleteWhereConditionIsReported)
+{
+    QcSqlDelete del;
+    del.from("users");
+    del.where("id");
+
+    const QcSqlDelete::QcStringList problems = del.validate();
+    ASSERT_EQ(problems.size(), 1u);
+    EXPECT_NE(problems[0].find("WHERE"), std::string::npos);
+}
+
+TEST(QcSqlDeleteValidate, NoWhereClauseIsNotAProblem)
+{
+    // Deleting every row on purpose (no WHERE at all) is legitimate SQL,
+    // not a gap -- same reasoning as QcSqlUpdateValidate.NoWhereClauseIsNotAProblem.
+    QcSqlDelete del;
+    del.from("users");
+
+    EXPECT_TRUE(del.validate().empty());
+}
+
+TEST(QcSqlDeleteToSql, ThrowsQcQueryBuildErrorWhenNoTable)
+{
+    QcSqlDelete del;
+
+    EXPECT_THROW(del.toSql(), QcQueryBuildError);
+}
+
+TEST(QcSqlDeleteToSql, ThrowsQcQueryBuildErrorForIncompleteWhereCondition)
+{
+    QcSqlDelete del;
+    del.from("users");
+    del.where("id");
+
+    EXPECT_THROW(del.toSql(), QcQueryBuildError);
+}

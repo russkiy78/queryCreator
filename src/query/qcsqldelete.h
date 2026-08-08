@@ -44,6 +44,14 @@ public:
     bool openParenthesis();
     bool closeParenthesis();
 
+    // Checks this statement's own state for structural gaps that would
+    // otherwise make toSql() silently emit broken SQL -- see
+    // QcSqlUpdate::validate()'s doc comment for the identical rationale
+    // (no target table, unclosed parenthesis group, incomplete WHERE
+    // condition). A DELETE with no WHERE at all is deliberately not
+    // flagged, for the same reason as QcSqlUpdate.
+    QcStringList validate() const;
+
     /*SQL generation*/
     QcSqlStatement toSql() const;
     QcSqlStatement toSql(QcDbDriver driver) const;

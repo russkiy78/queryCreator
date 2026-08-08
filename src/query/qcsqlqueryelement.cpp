@@ -578,6 +578,31 @@ bool QcSqlQueryElement::isCloseParenthesisMarker() const
     return m_compareType == _closeParenthesis_;
 }
 
+bool QcSqlQueryElement::isIncomplete() const
+{
+    if (isOpenParenthesisMarker() || isCloseParenthesisMarker()) {
+        return false;
+    }
+
+    return m_compareType == _isEqualTo_ && !m_isJsonComparison && !m_subQuery && m_values.empty()
+        && std::holds_alternative<std::monostate>(m_value);
+}
+
+QcSqlBase::QcStringList QcSqlQueryElement::validateChain(const std::vector<std::pair<int, QcSqlQueryElement>> & chain, const std::string & clauseLabel)
+{
+    QcStringList problems;
+
+    for (const auto & entry : chain) {
+        const QcSqlQueryElement & element = entry.second;
+        if (element.isIncomplete()) {
+            problems.push_back(clauseLabel + " condition on \"" + element.m_columnName
+                + "\" has no comparator set (call e.g. isEqualTo()/isLike()/isNull() on the element where()/and_()/or_() returned)");
+        }
+    }
+
+    return problems;
+}
+
 std::string QcSqlQueryElement::renderChain(const std::vector<std::pair<int, QcSqlQueryElement>> & chain, QcVariantList & params,
                                             QcDbDriver driver)
 {

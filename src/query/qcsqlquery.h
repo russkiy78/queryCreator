@@ -91,6 +91,25 @@ public:
     QcSqlQuery & intersectWith(const QcSqlQuery & query);
     QcSqlQuery & exceptWith(const QcSqlQuery & query);
 
+    // Checks this query's own directly-held state (not any nested subquery's
+    // -- FROM/JOIN/WHERE-subquery/CTE/set-operation members validate
+    // themselves independently the moment their own toSql() runs, whether
+    // called directly or as part of this query rendering around them) for
+    // structural gaps that would otherwise make toSql() silently emit broken
+    // SQL: a non-CROSS JOIN with no ON condition, an openParenthesis()/
+    // *_OpenParenthesis() left unclosed, or a where()/and_()/or_()/having()/
+    // and_Having()/or_Having() call whose returned element never got a
+    // comparator chained onto it (see QcSqlQueryElement::isIncomplete()).
+    // Returns one human-readable problem string per issue found, empty if
+    // none -- toSql() calls this itself and throws QcQueryBuildError built
+    // from the result, but it's public so a caller can check "is this query
+    // well-formed yet?" without a try/catch. Deliberately not a check
+    // against a real schema (no such thing exists here) -- a WHERE
+    // referencing a column that doesn't exist, or a JOIN alias nothing else
+    // references, are not flagged; only gaps in the query's own internal
+    // structure are.
+    QcStringList validate() const;
+
     /*SQL generation*/
 
     // Top-level entry point: renders this query as a full, standalone

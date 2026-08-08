@@ -56,6 +56,20 @@ public:
     // `autoIncrementColumn` is simply ignored.
     QcSqlInsert & returning(const QcStringList & columns, const std::string & autoIncrementColumn);
 
+    // Checks this statement's own state for structural gaps that would
+    // otherwise make toSql() silently emit broken SQL -- currently just "no
+    // target table" (into() never called), which breaks every INSERT
+    // regardless of whether returning() is in play, not only when it is.
+    // Returns one human-readable problem string per issue found, empty if
+    // none -- toSql() calls this itself and throws QcQueryBuildError built
+    // from the result (see qcsqlbase.h), but it's public so a caller can
+    // check "is this statement well-formed yet?" without a try/catch. An
+    // empty column list is deliberately not flagged here -- toSql() renders
+    // it as `INSERT INTO t () VALUES ()` on purpose (see
+    // QcSqlInsertToSql.EmptyColumnsRendersEmptyColumnAndValueLists), not a
+    // gap this validates against.
+    QcStringList validate() const;
+
     /*SQL generation*/
 
     // Top-level entry point: renders this statement as a full, standalone

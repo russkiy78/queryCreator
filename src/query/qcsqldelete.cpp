@@ -84,8 +84,29 @@ bool QcSqlDelete::closeParenthesis()
     return true;
 }
 
+QcSqlDelete::QcStringList QcSqlDelete::validate() const
+{
+    QcStringList problems;
+
+    if (m_table.empty()) {
+        problems.push_back("DELETE has no target table (call from())");
+    }
+
+    if (m_whereParenDepth != 0) {
+        problems.push_back("WHERE clause has " + std::to_string(m_whereParenDepth)
+            + " unclosed parenthesis group(s) -- call closeParenthesis() once per openParenthesis()/*_OpenParenthesis()");
+    }
+
+    const QcStringList whereProblems = QcSqlQueryElement::validateChain(m_whereElements, "WHERE");
+    problems.insert(problems.end(), whereProblems.begin(), whereProblems.end());
+
+    return problems;
+}
+
 std::string QcSqlDelete::toSql(QcVariantList & params, QcDbDriver driver) const
 {
+    qcThrowIfQueryInvalid(validate());
+
     std::string sql = "DELETE FROM " + QcSqlDialect::quoteTableRef(m_table, driver);
 
     if (driver == QcDbDriver::MSSQL) {
