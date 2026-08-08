@@ -1,0 +1,51 @@
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Executables
+*.exe
+*.out
+*.app
+*.user
+
+# make
+Makefile*
+*.pro.user
+build-queryCreator
+.vscode/
+
+# CMake
+build/
+# Per-driver build directories, e.g. build-sqlite, build-oracle, build-pg --
+# the project's own docs (testing.md) recommend one build dir per
+# QC_DB_DRIVER for local testing.
+build-*/
+CMakeCache.txt
+CMakeFiles/
+CMakeUserPresets.json
+
+# vcpkg (only relevant if someone clones it inside the repo instead of
+# pointing VCPKG_ROOT elsewhere)
+/vcpkg/
+vcpkg_installed/
+
+# Local database credentials for the integration test suites -- see
+# tests/db_config.ini.example for the format.
+tests/db_config.ini
+
+# VitePress / npm
+node_modules/
+docs-site/.vitepress/dist/
+docs-site/.vitepress/cache/
+docs-site/.vitepress/.temp/
+
+.kilo
