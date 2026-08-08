@@ -9,6 +9,9 @@ on:
 env:
   # Keep in sync with vcpkg.json's builtin-baseline.
   VCPKG_COMMIT: f1d4bbc72f183441403ba5107cb19d75a5abc2a2
+  # Local-only SQL Server instance spun up per job below (mssqlsuite) --
+  # not a real secret, never exposed outside this ephemeral runner.
+  QC_MSSQL_SA_PASSWORD: "Qc_Test_2026!"
 
 jobs:
   build:
@@ -39,6 +42,44 @@ jobs:
       - name: Install unixODBC (Linux, mssql)
         if: matrix.driver == 'mssql' && runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y unixodbc-dev
+
+      # Live databases for the integration suites (test_integration_select.cpp,
+      # test_integration_dml.cpp, test_qcconnectionpool.cpp) -- without one
+      # reachable, QcConnectionPoolTest::SetUp() GTEST_SKIP()s the whole
+      # fixture (~340 of 434 tests) rather than failing, so CI silently never
+      # exercised a real driver until now. Both actions below work
+      # identically on ubuntu-latest and windows-latest.
+      - name: Start PostgreSQL
+        if: matrix.driver == 'postgresql'
+        uses: ikalnytskyi/action-setup-postgres@v8
+        with:
+          # Matches the demo/demo/demo@127.0.0.1:5432 fallback in
+          # tests/testdbconfig.cpp -- no tests/db_config.ini needed.
+          username: demo
+          password: demo
+          database: demo
+
+      - name: Install SQL Server
+        if: matrix.driver == 'mssql'
+        uses: potatoqualitee/mssqlsuite@v1.11
+        with:
+          install: sqlengine, sqlclient
+          sa-password: ${{ env.QC_MSSQL_SA_PASSWORD }}
+
+      - name: Create MSSQL test database and db_config.ini
+        if: matrix.driver == 'mssql'
+        shell: bash
+        run: |
+          sqlcmd -S 127.0.0.1 -U sa -P "$QC_MSSQL_SA_PASSWORD" -C -Q "CREATE DATABASE demo"
+          {
+            echo "[mssql]"
+            echo "host=127.0.0.1"
+            echo "port=1433"
+            echo "database=demo"
+            echo "user=sa"
+            echo "password=$QC_MSSQL_SA_PASSWORD"
+            echo "connect_timeout_seconds=5"
+          } > tests/db_config.ini
 
       - name: Configure
         run: cmake --preset ${{ matrix.driver }}
