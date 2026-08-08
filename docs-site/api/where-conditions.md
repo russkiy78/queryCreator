@@ -82,8 +82,27 @@ element.isDistinctFrom(val);     // IS DISTINCT FROM
 element.isNotDistinctFrom(val);  // IS NOT DISTINCT FROM
 ```
 
-Native on PostgreSQL/SQLite. On Oracle/MSSQL expanded to `=`/`IS NULL`;
-MySQL uses `<=>`.
+Native on PostgreSQL (`IS [NOT] DISTINCT FROM`) and emulated via `IS`/`IS NOT`
+on SQLite (SQLite's `IS`/`IS NOT` are already NULL-safe, just spelled the
+other way around). On MySQL, `isNotDistinctFrom` renders `a <=> b`
+(NULL-safe equality) and `isDistinctFrom` renders `NOT (a <=> b)`.
+
+On Oracle/MSSQL there is no native operator, so the condition is spelled
+out as a NULL-safe expression — **not** the naive `a = b OR (a IS NULL AND
+b IS NULL)` form, which is a three-valued-logic trap (when exactly one side
+is NULL, `a = b` itself evaluates to `NULL`, not `FALSE`, silently dropping
+rows that should match). The actual rendering guards the equality so it only
+runs once both sides are known non-NULL:
+
+```sql
+-- isNotDistinctFrom, Oracle/MSSQL:
+((a IS NULL AND b IS NULL) OR (a IS NOT NULL AND b IS NOT NULL AND a = b))
+-- isDistinctFrom, Oracle/MSSQL: the same expression wrapped in NOT (...)
+```
+
+On MSSQL specifically, because placeholders are positional (`?`), a value
+operand (not a subquery) is bound once per textual occurrence of `b` above
+(three times).
 
 ### EXISTS / NOT EXISTS
 
@@ -103,13 +122,14 @@ element.cast(
     QcSqlBase::dataTypes::_int_,
     5LL
 );
-// WHERE CAST(column AS INT) = 5
+// WHERE CAST("column" AS INTEGER) = $1   (PostgreSQL; type name is driver-specific,
+                                            // e.g. "INT" on MSSQL — see SQL Dialects)
 ```
 
 Also accepts a subquery on the right side:
 ```cpp
 element.cast(_string_, _int_, subQuery);
-// WHERE CAST(column AS INT) = (SELECT ...)
+// WHERE CAST("column" AS INTEGER) = (SELECT ...)
 ```
 
 ## AND / OR / Parentheses

@@ -23,7 +23,10 @@ are rendered as literal SQL text. The `toSql()` signatures take no `params` argu
 
 ```cpp
 value.cast(QcSqlBase::dataTypes::_string_, QcSqlBase::dataTypes::_int_);
-// CAST(expr AS INT)
+// CAST(expr AS INTEGER) on PostgreSQL/SQLite (default driver: PostgreSQL)
+// CAST(expr AS INT) on MSSQL
+// CAST(expr AS SIGNED) on MySQL
+// CAST(expr AS NUMBER) on Oracle
 ```
 
 `from` and `to` are `QcSqlBase::dataTypes` enum values: `_int_`, `_float_`,
@@ -151,11 +154,11 @@ value.extract(QcSqlBase::datePartTypes::_year_);
 // CAST(strftime('%Y', expr) AS INTEGER) on SQLite
 
 value.dateAdd(QcSqlBase::datePartTypes::_day_, 7);
-// expr + INTERVAL '7 day' on PostgreSQL
-// DATE_ADD(expr, INTERVAL 7 day) on MySQL
-// DATEADD(day, 7, expr) on MSSQL
-// datetime(expr, '+7 day') on SQLite
-// expr + INTERVAL '7' day on Oracle
+// expr + INTERVAL '7 DAY' on PostgreSQL          (unit keyword uppercase)
+// DATE_ADD(expr, INTERVAL 7 DAY) on MySQL         (unit keyword uppercase)
+// DATEADD(day, 7, expr) on MSSQL                  (unit keyword lowercase)
+// datetime(expr, '+7 days') on SQLite             (unit name lowercase, plural)
+// expr + INTERVAL '7' DAY on Oracle               (unit keyword uppercase)
 ```
 
 `datePartTypes` vocabulary: `_year_`, `_month_`, `_day_`, `_hour_`, `_minute_`,
@@ -177,5 +180,5 @@ Each function wraps the result of the previous one in call order:
 query.addReturnValue("balance <rounded>")
     .cast(_string_, _float_)
     .round(2);
-// ROUND(CAST("balance" AS FLOAT), 2) AS "rounded"
+// ROUND(CAST("balance" AS DOUBLE PRECISION), 2) AS "rounded"   (PostgreSQL; "FLOAT" on MSSQL)
 ```

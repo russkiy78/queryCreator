@@ -37,7 +37,8 @@ Maps `QcSqlBase::dataTypes` enum values to SQL type names for
 CAST target lists:
 
 - MySQL `CAST()` accepts only `SIGNED`/`CHAR`/`DATE`/`DATETIME`/`DECIMAL`/
-  `DOUBLE`/`JSON` — no `VARCHAR`, `BOOLEAN`, `TEXT`, or `BLOB` as cast targets
+  `DOUBLE`/`JSON`/`BINARY` (`_blob_` maps to `BINARY`) — no `VARCHAR`,
+  `BOOLEAN`, or `TEXT` as cast targets
 - Oracle has no SQL `BOOLEAN` — substitutes `NUMBER(1)`
 - MSSQL/Oracle have no `JSON` type — substitutes `NVARCHAR(MAX)`/`CLOB`
 
@@ -161,11 +162,11 @@ Quotes a FROM/JOIN table reference that may carry an inline alias
 
 | Driver | Form |
 |--------|------|
-| PostgreSQL | `expr + INTERVAL 'N unit'` |
-| MySQL | `DATE_ADD(expr, INTERVAL N unit)` |
-| MSSQL | `DATEADD(unit, N, expr)` |
-| SQLite | `datetime(expr, '+N unit')` |
-| Oracle | `expr + INTERVAL 'N' unit` |
+| PostgreSQL | `expr + INTERVAL 'N UNIT'` (unit keyword uppercase, e.g. `DAY`) |
+| MySQL | `DATE_ADD(expr, INTERVAL N UNIT)` (unit keyword uppercase) |
+| MSSQL | `DATEADD(unit, N, expr)` (unit keyword lowercase, e.g. `day`) |
+| SQLite | `datetime(expr, '+N units')` (unit name lowercase **and plural**, e.g. `days`) |
+| Oracle | `expr + INTERVAL 'N' UNIT` (unit keyword uppercase) |
 
 `part` values: `_year_`, `_month_`, `_day_`, `_hour_`, `_minute_`, `_second_`.
 Negative `amount` subtracts.
@@ -197,9 +198,18 @@ it needs to call back into `bind()` for operand appending:
 
 | Driver | Rendering |
 |--------|-----------|
-| PostgreSQL/SQLite | Native `IS DISTINCT FROM` |
-| Oracle/MSSQL | `(a = b OR (a IS NULL AND b IS NULL))` |
-| MySQL | `a <=> b` |
+| PostgreSQL | Native `a IS DISTINCT FROM b` / `a IS NOT DISTINCT FROM b` |
+| SQLite | `a IS NOT b` (for `isDistinctFrom`) / `a IS b` (for `isNotDistinctFrom`) — SQLite has no `IS DISTINCT FROM` keyword, but its `IS`/`IS NOT` are already NULL-safe, just spelled the other way around |
+| MySQL | `NOT (a <=> b)` (for `isDistinctFrom`) / `a <=> b` (for `isNotDistinctFrom`) |
+| Oracle/MSSQL | `((a IS NULL AND b IS NULL) OR (a IS NOT NULL AND b IS NOT NULL AND a = b))`, wrapped in `NOT (...)` for `isDistinctFrom` |
 
-On MSSQL, the same operand value may be bound multiple times (positional `?`
-is not reusable).
+Oracle/MSSQL have no native NULL-safe comparison operator, so the condition
+is spelled out. This is deliberately **not** the naive `a = b OR (a IS NULL
+AND b IS NULL)` form: when exactly one side is NULL, `a = b` evaluates to
+`NULL` (not `FALSE`), so `NULL OR FALSE` is `NULL` rather than `FALSE`,
+which would silently drop rows that should match. The equality is guarded
+to run only once both sides are known non-NULL instead.
+
+On MSSQL specifically, the same operand value may be bound multiple times
+(positional `?` is not reusable) — once per textual occurrence of `b` in
+the expression above (three times for a non-subquery operand).
