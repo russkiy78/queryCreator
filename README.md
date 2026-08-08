@@ -1,4 +1,4 @@
-<div align="center"><img src="logo/logo.png" alt="queryCreator logo" width="200"></div>
+<div align="center"><img src="logo/logo-big-black.png" alt="queryCreator logo" width="400"></div>
 
 # queryCreator
 
