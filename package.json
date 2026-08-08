@@ -1,0 +1,15 @@
+{
+  "name": "querycreator-docs",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vitepress dev docs-site",
+    "build": "vitepress build docs-site",
+    "preview": "vitepress preview docs-site",
+    "deploy": "vitepress build docs-site && touch docs-site/.vitepress/dist/.nojekyll && gh-pages -d docs-site/.vitepress/dist -m 'docs: deploy [skip ci]'"
+  },
+  "devDependencies": {
+    "gh-pages": "^6.1.1",
+    "vitepress": "^1.3.0"
+  }
+}

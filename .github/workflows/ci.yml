@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # Keep in sync with vcpkg.json's builtin-baseline.
+  VCPKG_COMMIT: f1d4bbc72f183441403ba5107cb19d75a5abc2a2
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        driver: [postgresql, sqlite, mssql]
+    runs-on: ${{ matrix.os }}
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+    steps:
+      - uses: actions/checkout@v4
+
+      # sqlite is fully vendored (third_party/sqlite); mssql links the
+      # system/CMake-builtin ODBC driver manager (find_package(ODBC), see
+      # CMakeLists.txt) -- neither needs vcpkg.
+      - name: Bootstrap vcpkg
+        if: matrix.driver != 'sqlite' && matrix.driver != 'mssql'
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: ${{ env.VCPKG_ROOT }}
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT }}
+
+      # unixODBC's dev package (headers + odbc.pc for find_package(ODBC)'s
+      # pkg-config lookup) isn't guaranteed present on the Linux runner
+      # image, unlike Windows' built-in ODBC driver manager.
+      - name: Install unixODBC (Linux, mssql)
+        if: matrix.driver == 'mssql' && runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y unixodbc-dev
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.driver }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.driver }}
+
+      - name: Test
+        run: ctest --preset ${{ matrix.driver }}
+
+  # MySQL's vcpkg port (libmysql) pulls in Boost, OpenSSL, rapidjson, etc. and
+  # is slow to build from source, so it's kept out of the default matrix and
+  # run on demand instead.
+  mysql:
+    if: github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bootstrap vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: ${{ env.VCPKG_ROOT }}
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT }}
+
+      - name: Configure
+        run: cmake --preset mysql
+
+      - name: Build
+        run: cmake --build --preset mysql
+
+      - name: Test
+        run: ctest --preset mysql

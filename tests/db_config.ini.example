@@ -1,0 +1,64 @@
+# Connection settings for the integration / "battle" test suites
+# (test_integration_select.cpp, test_integration_dml.cpp,
+# test_qcconnectionpool.cpp) and any future ones.
+#
+# Copy this file to db_config.ini (same directory) and fill in real
+# credentials -- db_config.ini itself is gitignored so local/CI secrets never
+# get committed. Tests read the section matching whichever QC_DB_DRIVER the
+# binary was built against (see CMakeLists.txt / CMakePresets.json); a
+# missing file or missing section is not an error, it just falls back to the
+# project's standard local-dev defaults (see testdbconfig.cpp) and, for
+# suites where that default is unreachable, GTEST_SKIP()s instead of
+# failing.
+#
+# Only the fields relevant to a given driver need to be filled in:
+#   - postgresql/mysql/mssql: host, port, database, user, password
+#   - sqlite: database (a filesystem path, or a URI like
+#     "file::memory:?cache=shared" -- see qcnativeconnection.cpp)
+#   - oracle: host, port, database (service name), user, password
+# connect_timeout_seconds is optional everywhere (0/omitted = driver default).
+
+[postgresql]
+host=127.0.0.1
+port=5432
+database=demo
+user=demo
+password=demo
+connect_timeout_seconds=5
+
+[sqlite]
+# A plain path works too (e.g. database=/tmp/qc_tests.sqlite3); this URI form
+# keeps every connection opened during one test run pointed at the same
+# database without leaving a file behind (see SQLITE_OPEN_URI in
+# qcnativeconnection.cpp).
+database=file:qc_tests?mode=memory&cache=shared
+
+[mysql]
+host=127.0.0.1
+port=3306
+database=demo
+user=demo
+password=demo
+connect_timeout_seconds=5
+
+[mssql]
+host=127.0.0.1
+port=1433
+database=demo
+user=demo
+password=demo
+connect_timeout_seconds=5
+# Also needs an actual SQL Server ODBC driver installed and registered with
+# the system's ODBC driver manager (e.g. Microsoft's msodbcsql18, or
+# FreeTDS's tdsodbc) -- see CMakeLists.txt's MSSQL branch.
+
+# database is the Oracle service name (not a TNS string) -- combined with
+# host/port into an Easy Connect string "host:port/database" for OCILogon2
+# (see qcnativeconnection.cpp).
+[oracle]
+host=127.0.0.1
+port=1521
+database=xe
+user=demo
+password=demo
+connect_timeout_seconds=5

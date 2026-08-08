@@ -1,0 +1,93 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "vcpkg",
+      "hidden": true,
+      "inherits": "base",
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+    },
+    {
+      "name": "postgresql",
+      "displayName": "PostgreSQL (libpq, via vcpkg)",
+      "description": "Default driver. Requires VCPKG_ROOT to point at a bootstrapped vcpkg checkout.",
+      "inherits": "vcpkg",
+      "cacheVariables": {
+        "QC_DB_DRIVERS": "PostgreSQL",
+        "VCPKG_MANIFEST_FEATURES": "postgresql"
+      }
+    },
+    {
+      "name": "mysql",
+      "displayName": "MySQL (libmysqlclient, via vcpkg)",
+      "description": "Requires VCPKG_ROOT to point at a bootstrapped vcpkg checkout.",
+      "inherits": "vcpkg",
+      "cacheVariables": {
+        "QC_DB_DRIVERS": "MySQL",
+        "VCPKG_MANIFEST_FEATURES": "mysql"
+      }
+    },
+    {
+      "name": "mssql",
+      "displayName": "Microsoft SQL Server (ODBC)",
+      "description": "Uses CMake's FindODBC — the system ODBC driver manager on Windows, unixODBC (unixodbc-dev) on Linux/macOS. Also needs an actual SQL Server ODBC driver installed and registered (e.g. Microsoft's msodbcsql18) — see CMakeLists.txt. Does not need VCPKG_ROOT.",
+      "inherits": "base",
+      "cacheVariables": {
+        "QC_DB_DRIVERS": "MSSQL"
+      }
+    },
+    {
+      "name": "sqlite",
+      "displayName": "SQLite (vendored amalgamation)",
+      "description": "No external dependencies — sqlite3.c is vendored under third_party/sqlite. Does not need VCPKG_ROOT.",
+      "inherits": "base",
+      "cacheVariables": {
+        "QC_DB_DRIVERS": "SQLite"
+      }
+    },
+    {
+      "name": "oracle",
+      "displayName": "Oracle (OCI, Instant Client)",
+      "description": "Not distributed via vcpkg (license). Install the Instant Client Basic + SDK packages and point OCI_ROOT or ORACLE_HOME at the install directory. Does not need VCPKG_ROOT.",
+      "inherits": "base",
+      "cacheVariables": {
+        "QC_DB_DRIVERS": "Oracle"
+      }
+    },
+    {
+      "name": "all",
+      "displayName": "All drivers (PostgreSQL + Oracle + MySQL + SQLite + MSSQL, one binary)",
+      "description": "Compiles every driver into one binary, selectable at runtime via QcConnectionParams::driver. Requires VCPKG_ROOT (for PostgreSQL/MySQL), Oracle Instant Client (OCI_ROOT/ORACLE_HOME), and unixODBC + a SQL Server ODBC driver (MSSQL) all installed at once — see the per-driver presets above for each dependency individually.",
+      "inherits": "vcpkg",
+      "cacheVariables": {
+        "QC_DB_DRIVERS": "All",
+        "VCPKG_MANIFEST_FEATURES": "postgresql;mysql"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "postgresql", "configurePreset": "postgresql", "configuration": "Debug" },
+    { "name": "mysql", "configurePreset": "mysql", "configuration": "Debug" },
+    { "name": "mssql", "configurePreset": "mssql", "configuration": "Debug" },
+    { "name": "sqlite", "configurePreset": "sqlite", "configuration": "Debug" },
+    { "name": "oracle", "configurePreset": "oracle", "configuration": "Debug" },
+    { "name": "all", "configurePreset": "all", "configuration": "Debug" }
+  ],
+  "testPresets": [
+    { "name": "postgresql", "configurePreset": "postgresql", "configuration": "Debug", "output": { "outputOnFailure": true } },
+    { "name": "mysql", "configurePreset": "mysql", "configuration": "Debug", "output": { "outputOnFailure": true } },
+    { "name": "mssql", "configurePreset": "mssql", "configuration": "Debug", "output": { "outputOnFailure": true } },
+    { "name": "sqlite", "configurePreset": "sqlite", "configuration": "Debug", "output": { "outputOnFailure": true } },
+    { "name": "oracle", "configurePreset": "oracle", "configuration": "Debug", "output": { "outputOnFailure": true } },
+    { "name": "all", "configurePreset": "all", "configuration": "Debug", "output": { "outputOnFailure": true } }
+  ]
+}

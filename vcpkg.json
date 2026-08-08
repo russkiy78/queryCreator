@@ -1,0 +1,21 @@
+{
+  "name": "querycreator",
+  "version": "0.1.0",
+  "description": "Lightweight C++20 SQL query-builder library with pluggable native database drivers",
+  "homepage": "https://github.com/",
+  "builtin-baseline": "f1d4bbc72f183441403ba5107cb19d75a5abc2a2",
+  "features": {
+    "postgresql": {
+      "description": "PostgreSQL native driver (libpq)",
+      "dependencies": [
+        "libpq"
+      ]
+    },
+    "mysql": {
+      "description": "MySQL native driver (libmysqlclient, MySQL 8.4 LTS)",
+      "dependencies": [
+        "libmysql"
+      ]
+    }
+  }
+}
