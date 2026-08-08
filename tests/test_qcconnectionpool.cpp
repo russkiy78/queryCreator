@@ -180,29 +180,34 @@ TEST_F(QcConnectionPoolTest, BusyTimeoutBoundsWaitOnALockedDatabase)
     // genuine, not simulated.
     const std::string path = uniqueTempDbPath();
 
-    QcConnectionParams writerParams;
-    writerParams.driver = QcDbDriver::SQLite;
-    writerParams.database = path;
-    QcNativeConnection writer(writerParams);
-    ASSERT_TRUE(writer.execute("CREATE TABLE t (id INTEGER)").has_value());
-    ASSERT_TRUE(writer.execute("BEGIN IMMEDIATE").has_value());
-    ASSERT_TRUE(writer.execute("INSERT INTO t (id) VALUES (1)").has_value()); // uncommitted -- holds the write lock
+    {
+        QcConnectionParams writerParams;
+        writerParams.driver = QcDbDriver::SQLite;
+        writerParams.database = path;
+        QcNativeConnection writer(writerParams);
+        ASSERT_TRUE(writer.execute("CREATE TABLE t (id INTEGER)").has_value());
+        ASSERT_TRUE(writer.execute("BEGIN IMMEDIATE").has_value());
+        ASSERT_TRUE(writer.execute("INSERT INTO t (id) VALUES (1)").has_value()); // uncommitted -- holds the write lock
 
-    QcConnectionParams contenderParams;
-    contenderParams.driver = QcDbDriver::SQLite;
-    contenderParams.database = path;
-    contenderParams.connectTimeoutSeconds = 1;
-    QcNativeConnection contender(contenderParams);
+        QcConnectionParams contenderParams;
+        contenderParams.driver = QcDbDriver::SQLite;
+        contenderParams.database = path;
+        contenderParams.connectTimeoutSeconds = 1;
+        QcNativeConnection contender(contenderParams);
 
-    const auto start = std::chrono::steady_clock::now();
-    const auto result = contender.execute("INSERT INTO t (id) VALUES (2)");
-    const auto elapsed = std::chrono::steady_clock::now() - start;
+        const auto start = std::chrono::steady_clock::now();
+        const auto result = contender.execute("INSERT INTO t (id) VALUES (2)");
+        const auto elapsed = std::chrono::steady_clock::now() - start;
 
-    EXPECT_FALSE(result.has_value()); // SQLITE_BUSY once busy_timeout elapses
-    EXPECT_GE(elapsed, std::chrono::milliseconds(900));
-    EXPECT_LT(elapsed, std::chrono::seconds(5));
+        EXPECT_FALSE(result.has_value()); // SQLITE_BUSY once busy_timeout elapses
+        EXPECT_GE(elapsed, std::chrono::milliseconds(900));
+        EXPECT_LT(elapsed, std::chrono::seconds(5));
 
-    writer.execute("ROLLBACK");
+        writer.execute("ROLLBACK");
+    } // writer/contender close here, releasing their OS file handles --
+      // required before remove() below: Windows refuses to delete a file
+      // that still has an open handle, unlike POSIX unlink().
+
     std::filesystem::remove(path);
 }
 
