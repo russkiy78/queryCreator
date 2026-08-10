@@ -229,6 +229,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Oracle's prebuilt libclntsh.so hardcodes the legacy soname
+      # "libaio.so.1" -- Ubuntu 24.04's 64-bit-time_t package transition
+      # renamed the actual library to libaio1t64 (providing only
+      # libaio.so.1t64, no libaio.so.1 compatibility name), so the dynamic
+      # loader can't find it at process start -- verified directly
+      # ("queryCreatorTests: error while loading shared libraries:
+      # libaio.so.1: cannot open shared object file"), a link-time warning
+      # only (ld doesn't need transitive .so deps resolved to link), not a
+      # link-time error, so this wasn't caught until something actually
+      # tried to run the binary (gtest_discover_tests(), in the Build step
+      # below). Same fix as iamazeem/setup-oracle-instant-client-action
+      # uses for the same reason.
+      - name: Fix libaio soname for Oracle Instant Client (Linux 24.04+)
+        run: |
+          sudo apt-get update && sudo apt-get install -y libaio1t64
+          sudo ln -sr /usr/lib/x86_64-linux-gnu/libaio.so.1t64 /usr/lib/x86_64-linux-gnu/libaio.so.1
+
       # Basic (runtime libs) + SDK (oci.h + import lib) -- both zips are
       # designed to be unzipped into the same directory (SDK just adds an
       # "sdk/" subfolder next to Basic's flat layout); no Oracle account/
