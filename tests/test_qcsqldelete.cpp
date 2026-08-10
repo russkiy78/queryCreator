@@ -135,6 +135,52 @@ TEST(QcSqlDeleteToSql, WhereChainWithParenthesesOmitsConnectorRightAfterOpenPare
     EXPECT_EQ(del.toSql().sql, expected);
 }
 
+TEST(QcSqlDeleteToSql, WhereOpenParenthesisAsFirstConditionOpensLeadingGroup)
+{
+    // and_OpenParenthesis() is exercised above -- this covers the other two
+    // *_OpenParenthesis() sugar methods, untested until now (see
+    // test_qcsqlquery.cpp's OpenParenthesisSugarMethodsPushMarkerThenElement
+    // for the equivalent QcSqlQuery coverage of all three).
+    QcSqlDelete del;
+    del.from("users");
+    del.where_OpenParenthesis("a").isEqualTo(QcSqlDelete::QcVariant(1LL));
+    del.or_("b").isEqualTo(QcSqlDelete::QcVariant(2LL));
+    del.closeParenthesis();
+
+    const std::string expected = "DELETE FROM " + q("users") + " WHERE (" + q("a") + " = " + QcSqlDialect::placeholder(1)
+        + " OR " + q("b") + " = " + QcSqlDialect::placeholder(2) + ")";
+    EXPECT_EQ(del.toSql().sql, expected);
+}
+
+TEST(QcSqlDeleteToSql, OrOpenParenthesisStartsNewGroupWithOrConnector)
+{
+    // Distinguishes or_OpenParenthesis() from and_OpenParenthesis() (already
+    // covered above) by the " OR (" it must render instead of " AND (".
+    QcSqlDelete del;
+    del.from("users");
+    del.where("a").isEqualTo(QcSqlDelete::QcVariant(1LL));
+    del.or_OpenParenthesis("b").isEqualTo(QcSqlDelete::QcVariant(2LL));
+    del.and_("c").isEqualTo(QcSqlDelete::QcVariant(3LL));
+    del.closeParenthesis();
+
+    const std::string expected = "DELETE FROM " + q("users") + " WHERE " + q("a") + " = " + QcSqlDialect::placeholder(1)
+        + " OR (" + q("b") + " = " + QcSqlDialect::placeholder(2) + " AND " + q("c") + " = " + QcSqlDialect::placeholder(3) + ")";
+    EXPECT_EQ(del.toSql().sql, expected);
+}
+
+TEST(QcSqlDeleteToSql, UseDriverSetsDialectForNoArgToSql)
+{
+    // Every other toSql() test in this file passes an explicit driver (see
+    // docs/testing.md) -- this is the one test proving the "set once, up
+    // front" useDriver()/no-arg-toSql() pairing itself actually works.
+    QcSqlDelete del;
+    del.useDriver(QcDbDriver::MySQL);
+    del.from("users");
+
+    const std::string expected = "DELETE FROM " + QcSqlDialect::quoteIdentifier("users", QcDbDriver::MySQL);
+    EXPECT_EQ(del.toSql().sql, expected);
+}
+
 TEST(QcSqlDeleteToSql, ReturningMatchesActiveDriverShapeAndPosition)
 {
     // Runs once per driver in a single build/binary now (previously this was

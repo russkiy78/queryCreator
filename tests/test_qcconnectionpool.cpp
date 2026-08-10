@@ -103,6 +103,34 @@ TEST(QcConnectionPool, ConstructingWithDriverNotCompiledIntoThisBuildThrows)
     EXPECT_THROW(QcNativeConnection connection(params), std::runtime_error);
 }
 
+// No connection is opened here (see nativeDriverInfo()'s doc comment in
+// qcnativeconnection.h) -- unlike almost every other test in this file, this
+// one needs no reachable database and isn't behind QcConnectionPoolTest's
+// SetUp()/GTEST_SKIP().
+TEST(QcNativeConnection, NativeDriverInfoReportsCompiledInDriversAndPlaceholderOtherwise)
+{
+    constexpr QcDbDriver kEveryDriver[] = {
+        QcDbDriver::PostgreSQL, QcDbDriver::Oracle, QcDbDriver::MySQL, QcDbDriver::SQLite, QcDbDriver::MSSQL,
+    };
+    const std::vector<QcDbDriver> compiled = compiledInDrivers();
+    const std::string kPlaceholder = "(driver not compiled into this build)";
+
+    for (const QcDbDriver driver : kEveryDriver) {
+        const std::string info = QcNativeConnection::nativeDriverInfo(driver);
+        const bool isCompiled = std::find(compiled.begin(), compiled.end(), driver) != compiled.end();
+        if (isCompiled) {
+            EXPECT_NE(info, kPlaceholder) << "driver=" << static_cast<int>(driver);
+            EXPECT_FALSE(info.empty()) << "driver=" << static_cast<int>(driver);
+        } else {
+            EXPECT_EQ(info, kPlaceholder) << "driver=" << static_cast<int>(driver);
+        }
+    }
+
+    // Default argument matches PostgreSQL, same as every other dialect
+    // default in this API.
+    EXPECT_EQ(QcNativeConnection::nativeDriverInfo(), QcNativeConnection::nativeDriverInfo(QcDbDriver::PostgreSQL));
+}
+
 // Runs against whichever of PostgreSQL/MSSQL/MySQL is primaryTestDriver() --
 // all three reject a nonexistent database at login time regardless of
 // otherwise-valid credentials (PostgreSQL: trusts loopback auth on this test
@@ -248,6 +276,36 @@ TEST_F(QcConnectionPoolTest, PermanentModeReusesTheSamePhysicalConnection)
         auto lease = pool.acquire();
         EXPECT_EQ(lease.connection().nativeHandle(), firstHandle);
     }
+}
+
+TEST_F(QcConnectionPoolTest, LeaseMoveAssignmentReleasesThePreviousConnectionAndTakesOwnershipOfTheNewOne)
+{
+    // Every other test in this file only ever move-constructs a Lease (`auto
+    // lease = pool.acquire();`) -- this is the only one that reassigns an
+    // existing Lease variable, the one call shape that actually exercises
+    // QcConnectionPool::Lease::operator=(Lease&&) rather than the move
+    // constructor.
+    QcConnectionPool pool(testParams(), QcConnectionPool::Mode::Permanent, 2);
+
+    auto a = pool.acquire();
+    auto b = pool.acquire();
+    void * aHandle = a.connection().nativeHandle();
+    void * bHandle = b.connection().nativeHandle();
+    ASSERT_NE(aHandle, bHandle);
+
+    a = std::move(b);
+
+    EXPECT_EQ(a.connection().nativeHandle(), bHandle);
+    EXPECT_TRUE(a.connection().execute(selectOne()).has_value());
+
+    // `a`'s original connection must have been released back to the pool by
+    // the assignment (not leaked as still-checked-out) -- pool size is 2, one
+    // slot still held by `a` itself, so a third acquire() only succeeds if
+    // that release actually happened, and must hand back that exact
+    // connection.
+    auto c = pool.tryAcquire(std::chrono::milliseconds(500));
+    ASSERT_TRUE(c.has_value());
+    EXPECT_EQ(c->connection().nativeHandle(), aHandle);
 }
 
 TEST_F(QcConnectionPoolTest, PermanentModeBlocksUntilAConnectionIsReleased)

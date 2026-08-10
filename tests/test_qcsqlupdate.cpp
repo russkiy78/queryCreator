@@ -161,6 +161,54 @@ TEST(QcSqlUpdateToSql, WhereChainWithParenthesesOmitsConnectorRightAfterOpenPare
     EXPECT_EQ(update.toSql().sql, expected);
 }
 
+TEST(QcSqlUpdateToSql, WhereOpenParenthesisAsFirstConditionOpensLeadingGroup)
+{
+    // and_OpenParenthesis() is exercised above -- this covers the other two
+    // *_OpenParenthesis() sugar methods, untested until now (see
+    // test_qcsqlquery.cpp's OpenParenthesisSugarMethodsPushMarkerThenElement
+    // for the equivalent QcSqlQuery coverage of all three).
+    QcSqlUpdate update;
+    update.table("users").set("x", QcSqlUpdate::QcVariant(1LL));
+    update.where_OpenParenthesis("a").isEqualTo(QcSqlUpdate::QcVariant(1LL));
+    update.or_("b").isEqualTo(QcSqlUpdate::QcVariant(2LL));
+    update.closeParenthesis();
+
+    const std::string expected = "UPDATE " + q("users") + " SET " + q("x") + " = " + QcSqlDialect::placeholder(1)
+        + " WHERE (" + q("a") + " = " + QcSqlDialect::placeholder(2) + " OR " + q("b") + " = " + QcSqlDialect::placeholder(3) + ")";
+    EXPECT_EQ(update.toSql().sql, expected);
+}
+
+TEST(QcSqlUpdateToSql, OrOpenParenthesisStartsNewGroupWithOrConnector)
+{
+    // Distinguishes or_OpenParenthesis() from and_OpenParenthesis() (already
+    // covered above) by the " OR (" it must render instead of " AND (".
+    QcSqlUpdate update;
+    update.table("users").set("x", QcSqlUpdate::QcVariant(1LL));
+    update.where("a").isEqualTo(QcSqlUpdate::QcVariant(1LL));
+    update.or_OpenParenthesis("b").isEqualTo(QcSqlUpdate::QcVariant(2LL));
+    update.and_("c").isEqualTo(QcSqlUpdate::QcVariant(3LL));
+    update.closeParenthesis();
+
+    const std::string expected = "UPDATE " + q("users") + " SET " + q("x") + " = " + QcSqlDialect::placeholder(1)
+        + " WHERE " + q("a") + " = " + QcSqlDialect::placeholder(2)
+        + " OR (" + q("b") + " = " + QcSqlDialect::placeholder(3) + " AND " + q("c") + " = " + QcSqlDialect::placeholder(4) + ")";
+    EXPECT_EQ(update.toSql().sql, expected);
+}
+
+TEST(QcSqlUpdateToSql, UseDriverSetsDialectForNoArgToSql)
+{
+    // Every other toSql() test in this file passes an explicit driver (see
+    // docs/testing.md) -- this is the one test proving the "set once, up
+    // front" useDriver()/no-arg-toSql() pairing itself actually works.
+    QcSqlUpdate update;
+    update.useDriver(QcDbDriver::MySQL);
+    update.table("users").set("x", QcSqlUpdate::QcVariant(1LL));
+
+    const std::string expected = "UPDATE " + QcSqlDialect::quoteIdentifier("users", QcDbDriver::MySQL) + " SET "
+        + QcSqlDialect::quoteIdentifier("x", QcDbDriver::MySQL) + " = " + QcSqlDialect::placeholder(1, QcDbDriver::MySQL);
+    EXPECT_EQ(update.toSql().sql, expected);
+}
+
 TEST(QcSqlUpdateToSql, ComparatorVocabularyIsAvailableThroughWhere)
 {
     // Spot-check a comparator with a non-trivial rendering branch (isIn) to

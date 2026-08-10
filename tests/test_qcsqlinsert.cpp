@@ -162,6 +162,20 @@ TEST(QcSqlInsertToSql, RendersColumnsAndPlaceholdersInInsertionOrder)
     EXPECT_EQ(std::get<std::string>(statement.params[1]), "Widget");
 }
 
+TEST(QcSqlInsertToSql, UseDriverSetsDialectForNoArgToSql)
+{
+    // Every other toSql() test in this file passes an explicit driver (see
+    // docs/testing.md) -- this is the one test proving the "set once, up
+    // front" useDriver()/no-arg-toSql() pairing itself actually works.
+    QcSqlInsert insert;
+    insert.useDriver(QcDbDriver::MySQL);
+    insert.into("users").set("id", QcSqlInsert::QcVariant(1LL));
+
+    const std::string expected = "INSERT INTO " + QcSqlDialect::quoteIdentifier("users", QcDbDriver::MySQL) + " ("
+        + QcSqlDialect::quoteIdentifier("id", QcDbDriver::MySQL) + ") VALUES (" + QcSqlDialect::placeholder(1, QcDbDriver::MySQL) + ")";
+    EXPECT_EQ(insert.toSql().sql, expected);
+}
+
 TEST(QcSqlInsertToSql, RendersManyColumnsInInsertionOrder)
 {
     QcSqlInsert insert;

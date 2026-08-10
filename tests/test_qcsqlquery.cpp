@@ -452,6 +452,21 @@ TEST(QcSqlQueryToSql, SelectsStarWhenNoReturnValuesAndOmitsFromWhenNoSource)
     EXPECT_EQ(query.toSql().sql, "SELECT *");
 }
 
+TEST(QcSqlQueryToSql, UseDriverSetsDialectForNoArgToSql)
+{
+    // Every other toSql() test in this file passes an explicit driver (see
+    // docs/testing.md) -- this is the one test proving the "set once, up
+    // front" useDriver()/no-arg-toSql() pairing itself actually works.
+    QcSqlQuery query;
+    query.useDriver(QcDbDriver::MySQL);
+    query.fromTable("users");
+    query.where("id").isEqualTo(QcSqlQuery::QcVariant(1LL));
+
+    const std::string expected = "SELECT * FROM " + QcSqlDialect::quoteIdentifier("users", QcDbDriver::MySQL) + " WHERE "
+        + QcSqlDialect::quoteIdentifier("id", QcDbDriver::MySQL) + " = " + QcSqlDialect::placeholder(1, QcDbDriver::MySQL);
+    EXPECT_EQ(query.toSql().sql, expected);
+}
+
 TEST(QcSqlQueryToSql, RendersReturnValuesAndFromTable)
 {
     QcSqlQuery query;

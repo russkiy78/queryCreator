@@ -458,6 +458,22 @@ TEST(QcSqlQueryElementToSql, IsEqualToBindsValueAndUsesPlaceholderOne)
     EXPECT_EQ(std::get<long long>(params[0]), 5LL);
 }
 
+TEST(QcSqlQueryElementToSql, UseDriverSetsDialectForSingleArgToSql)
+{
+    // useDriver() has no effect through QcSqlQuery::toSql() -- renderChain()
+    // (the only path an element built via where()/and_()/or_() normally goes
+    // through) always renders each element via the explicit-driver
+    // toSql(params, driver) overload, ignoring m_driver entirely (see
+    // QcSqlQueryElement::renderChain()). This exercises the one place it
+    // does matter: calling the single-arg toSql(params) directly on a
+    // standalone element, which delegates to toSql(params, m_driver).
+    QcSqlQueryElement element("id");
+    element.useDriver(QcDbDriver::MySQL).isEqualTo(QcSqlQueryElement::QcVariant(5LL));
+    QcSqlQuery::QcVariantList params;
+
+    EXPECT_EQ(element.toSql(params), QcSqlDialect::quoteIdentifier("id", QcDbDriver::MySQL) + " = " + QcSqlDialect::placeholder(1, QcDbDriver::MySQL));
+}
+
 TEST(QcSqlQueryElementToSql, PlaceholderNumberingContinuesFromExistingParams)
 {
     QcSqlQueryElement element("id");
