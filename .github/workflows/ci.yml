@@ -13,44 +13,35 @@ env:
   # not a real secret, never exposed outside this ephemeral runner.
   QC_MSSQL_SA_PASSWORD: "Qc_Test_2026!"
 
+# One job per driver (matching QC_DB_DRIVERS in CMakeLists.txt) rather than
+# one matrixed "build" job covering several -- each shows up in the GitHub
+# UI under its own name ("postgresql (windows-latest)", not
+# "build (windows-latest, postgresql)"), and every step below runs
+# unconditionally instead of behind a matrix.driver == 'x' guard.
 jobs:
-  build:
+  postgresql:
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        driver: [postgresql, sqlite, mssql]
     runs-on: ${{ matrix.os }}
     env:
       VCPKG_ROOT: ${{ github.workspace }}/vcpkg
     steps:
       - uses: actions/checkout@v4
 
-      # sqlite is fully vendored (third_party/sqlite); mssql links the
-      # system/CMake-builtin ODBC driver manager (find_package(ODBC), see
-      # CMakeLists.txt) -- neither needs vcpkg.
       - name: Bootstrap vcpkg
-        if: matrix.driver != 'sqlite' && matrix.driver != 'mssql'
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgDirectory: ${{ env.VCPKG_ROOT }}
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT }}
 
-      # unixODBC's dev package (headers + odbc.pc for find_package(ODBC)'s
-      # pkg-config lookup) isn't guaranteed present on the Linux runner
-      # image, unlike Windows' built-in ODBC driver manager.
-      - name: Install unixODBC (Linux, mssql)
-        if: matrix.driver == 'mssql' && runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y unixodbc-dev
-
-      # Live databases for the integration suites (test_integration_select.cpp,
+      # Live database for the integration suites (test_integration_select.cpp,
       # test_integration_dml.cpp, test_qcconnectionpool.cpp) -- without one
       # reachable, QcConnectionPoolTest::SetUp() GTEST_SKIP()s the whole
-      # fixture (~340 of 434 tests) rather than failing, so CI silently never
-      # exercised a real driver until now. Both actions below work
-      # identically on ubuntu-latest and windows-latest.
+      # fixture (~340 of 434 tests) rather than failing. Works identically on
+      # ubuntu-latest and windows-latest.
       - name: Start PostgreSQL
-        if: matrix.driver == 'postgresql'
         uses: ikalnytskyi/action-setup-postgres@v8
         with:
           # Matches the demo/demo/demo@127.0.0.1:5432 fallback in
@@ -59,15 +50,63 @@ jobs:
           password: demo
           database: demo
 
+      - name: Configure
+        run: cmake --preset postgresql
+
+      - name: Build
+        run: cmake --build --preset postgresql
+
+      - name: Test
+        run: ctest --preset postgresql
+
+  sqlite:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Fully vendored (third_party/sqlite) and file/in-memory, not a server
+      # -- no vcpkg bootstrap and no live-database provisioning step needed.
+      - name: Configure
+        run: cmake --preset sqlite
+
+      - name: Build
+        run: cmake --build --preset sqlite
+
+      - name: Test
+        run: ctest --preset sqlite
+
+  mssql:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Links the system/CMake-builtin ODBC driver manager
+      # (find_package(ODBC), see CMakeLists.txt), not vcpkg -- unixODBC's dev
+      # package (headers + odbc.pc for find_package(ODBC)'s pkg-config
+      # lookup) isn't guaranteed present on the Linux runner image, unlike
+      # Windows' built-in ODBC driver manager.
+      - name: Install unixODBC (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y unixodbc-dev
+
       - name: Install SQL Server
-        if: matrix.driver == 'mssql'
         uses: potatoqualitee/mssqlsuite@v1.11
         with:
           install: sqlengine, sqlclient
           sa-password: ${{ env.QC_MSSQL_SA_PASSWORD }}
 
+      # Live database for the integration suites, same reasoning as the
+      # PostgreSQL step above -- without one reachable, QcConnectionPoolTest
+      # ::SetUp() GTEST_SKIP()s the whole fixture.
       - name: Create MSSQL test database and db_config.ini
-        if: matrix.driver == 'mssql'
         shell: bash
         run: |
           sqlcmd -S 127.0.0.1 -U sa -P "$QC_MSSQL_SA_PASSWORD" -C -Q "CREATE DATABASE demo"
@@ -82,20 +121,18 @@ jobs:
           } > tests/db_config.ini
 
       - name: Configure
-        run: cmake --preset ${{ matrix.driver }}
+        run: cmake --preset mssql
 
       - name: Build
-        run: cmake --build --preset ${{ matrix.driver }}
+        run: cmake --build --preset mssql
 
       - name: Test
-        run: ctest --preset ${{ matrix.driver }}
+        run: ctest --preset mssql
 
   # MySQL's vcpkg port (libmysql) pulls in Boost, OpenSSL, rapidjson, etc. and
-  # is slow to build from source (15-20+ minutes) -- kept as its own job
-  # (own driver, not part of the `build` matrix above) so a slow MySQL run
-  # never blocks/reruns the other three drivers, but it still runs on every
-  # push/PR/dispatch like they do, not workflow_dispatch-only: correctness
-  # here matters more than turnaround time.
+  # is slow to build from source (15-20+ minutes) -- runs on every
+  # push/PR/dispatch like the other four drivers, not workflow_dispatch-only:
+  # correctness here matters more than turnaround time.
   mysql:
     strategy:
       fail-fast: false
@@ -158,3 +195,77 @@ jobs:
 
       - name: Test
         run: ctest --preset mysql
+
+  # Oracle Instant Client (Basic + SDK) is proprietary -- not distributed via
+  # vcpkg/apt (see cmake/FindOracleOCI.cmake) -- so it's fetched directly from
+  # Oracle here instead, and a live database comes from a service container
+  # (see below), the same approach docs/architecture.md already flags as
+  # missing ("oracle is not included in CI"). GitHub Actions service
+  # containers only run on Linux runners, and gvenzl/setup-oracle-free's own
+  # docs say the same ("Only Linux runners are supported for the time
+  # being") -- so unlike the other four drivers, this is ubuntu-latest only,
+  # no Windows leg.
+  oracle:
+    runs-on: ubuntu-latest
+    services:
+      # https://github.com/gvenzl/oci-oracle-free#github-actions -- FREEPDB1
+      # is this image's fixed default pluggable-database service name (not
+      # renameable without extra init scripts), matching the [oracle]
+      # database= value below. "-slim-faststart" trims image size/startup
+      # time; the healthcheck options are the image's own documented ones.
+      oracle:
+        image: gvenzl/oracle-free:23-slim-faststart
+        env:
+          ORACLE_RANDOM_PASSWORD: true
+          APP_USER: demo
+          APP_USER_PASSWORD: demo
+        ports:
+          - 1521:1521
+        options: >-
+          --health-cmd healthcheck.sh
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # Basic (runtime libs) + SDK (oci.h + import lib) -- both zips are
+      # designed to be unzipped into the same directory (SDK just adds an
+      # "sdk/" subfolder next to Basic's flat layout); no Oracle account/
+      # login needed for either, verified directly. OCI_ROOT is
+      # FindOracleOCI.cmake's own first hint; LD_LIBRARY_PATH is separate
+      # and just as required -- libclntsh.so itself needs libnnz.so and
+      # friends (also in this same directory) resolved at process start,
+      # which is only a link-time non-issue, not a runtime one: the "Build"
+      # step below already executes the freshly linked test binary once
+      # itself (gtest_discover_tests()), not just "Test" afterward.
+      - name: Install Oracle Instant Client (Basic + SDK)
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -sSfLO https://download.oracle.com/otn_software/linux/instantclient/instantclient-basic-linuxx64.zip
+          curl -sSfLO https://download.oracle.com/otn_software/linux/instantclient/instantclient-sdk-linuxx64.zip
+          unzip -q -o instantclient-basic-linuxx64.zip
+          unzip -q -o instantclient-sdk-linuxx64.zip
+          echo "OCI_ROOT=$RUNNER_TEMP/instantclient_23_26" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$RUNNER_TEMP/instantclient_23_26" >> "$GITHUB_ENV"
+
+      - name: Create db_config.ini
+        run: |
+          {
+            echo "[oracle]"
+            echo "host=127.0.0.1"
+            echo "port=1521"
+            echo "database=FREEPDB1"
+            echo "user=demo"
+            echo "password=demo"
+            echo "connect_timeout_seconds=5"
+          } > tests/db_config.ini
+
+      - name: Configure
+        run: cmake --preset oracle
+
+      - name: Build
+        run: cmake --build --preset oracle
+
+      - name: Test
+        run: ctest --preset oracle
