@@ -91,10 +91,12 @@ jobs:
         run: ctest --preset ${{ matrix.driver }}
 
   # MySQL's vcpkg port (libmysql) pulls in Boost, OpenSSL, rapidjson, etc. and
-  # is slow to build from source, so it's kept out of the default matrix and
-  # run on demand instead.
+  # is slow to build from source (15-20+ minutes) -- kept as its own job
+  # (own driver, not part of the `build` matrix above) so a slow MySQL run
+  # never blocks/reruns the other three drivers, but it still runs on every
+  # push/PR/dispatch like they do, not workflow_dispatch-only: correctness
+  # here matters more than turnaround time.
   mysql:
-    if: github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -110,6 +112,43 @@ jobs:
         with:
           vcpkgDirectory: ${{ env.VCPKG_ROOT }}
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT }}
+
+      # vcpkg's "libmysql" port builds the actual MySQL server/client source
+      # tree, and its cmake/rpc.cmake hard-requires rpc/rpc.h (Sun RPC,
+      # dropped from glibc years ago) -- not preinstalled on this runner
+      # image. Windows is unaffected: rpc.cmake returns immediately on WIN32.
+      - name: Install libtirpc (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libtirpc-dev
+
+      # Live database for the integration suites, same reasoning as the
+      # PostgreSQL/MSSQL steps above -- without one reachable,
+      # QcConnectionPoolTest::SetUp() GTEST_SKIP()s the whole fixture.
+      # GitHub-hosted runners only ship a preinstalled MySQL *server* on
+      # Linux (Windows has the client tools only, see actions/runner-images'
+      # own docs), and Docker services are Linux-only too -- this action
+      # downloads/starts its own mysqld on both, identically.
+      - name: Start MySQL
+        uses: shogo82148/actions-setup-mysql@v1
+        with:
+          mysql-version: "8.0"
+          root-password: root
+          user: demo
+          password: demo
+
+      - name: Create MySQL test database and db_config.ini
+        shell: bash
+        run: |
+          mysql -h127.0.0.1 -uroot -proot -e "CREATE DATABASE demo"
+          {
+            echo "[mysql]"
+            echo "host=127.0.0.1"
+            echo "port=3306"
+            echo "database=demo"
+            echo "user=demo"
+            echo "password=demo"
+            echo "connect_timeout_seconds=5"
+          } > tests/db_config.ini
 
       - name: Configure
         run: cmake --preset mysql

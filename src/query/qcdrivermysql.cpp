@@ -1,4 +1,13 @@
-#include <mysql.h>
+// Not just <mysql.h> -- both the official vcpkg "libmysql" port
+// (-DINSTALL_INCLUDEDIR=include/mysql in its portfile.cmake) and every
+// mainstream distro's libmysqlclient-dev package install this header one
+// directory level deeper than the include root their CMake/pkg-config
+// integration actually exposes -- verified directly against both. A
+// previous, local-only CMake shim for this driver happened to add the
+// nested include/mysql directory itself, which papered over this until the
+// CI "mysql" job (workflow_dispatch-only, and never actually run before)
+// exercised the real vcpkg package for the first time.
+#include <mysql/mysql.h>
 
 #include <cstring>
 #include <stdexcept>
